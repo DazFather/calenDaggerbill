@@ -38,7 +38,7 @@ var organizers = map[int64]*Event{
 }
 
 func main() {
-	robot.Start(startHandler, joinHandler)
+	robot.Start(startHandler, joinHandler, publishHandler)
 }
 
 var startHandler = robot.Command{
@@ -46,24 +46,23 @@ var startHandler = robot.Command{
 	Trigger:     "/start",
 	ReplyAt:     message.MESSAGE + message.CALLBACK_QUERY,
 	CallFunc: func(bot *robot.Bot, update *message.Update) message.Any {
-		var _, payload = estractCommand(update)
+		var _, payload = extractCommand(update)
 		if len(payload) == 0 {
 			return message.Text{"Welcome!", nil}
 		}
 
 		if event := retreiveEvent(payload[0]); event != nil {
-			return buildEventMessage(*event, payload[0], bot.ChatID)
+			return buildDateListMessage(*event, payload[0], bot.ChatID)
 		}
 		return message.Text{"Invalid invitation link", nil}
 	},
 }
 
 var joinHandler = robot.Command{
-	Description: "Start the bot",
-	Trigger:     "/join",
-	ReplyAt:     message.CALLBACK_QUERY,
+	Trigger: "/join",
+	ReplyAt: message.CALLBACK_QUERY,
 	CallFunc: func(bot *robot.Bot, update *message.Update) message.Any {
-		var _, payload = estractCommand(update)
+		var _, payload = extractCommand(update)
 		if len(payload) != 2 {
 			return message.Text{"Invalid joining: " + update.CallbackQuery.Data, nil}
 		}
@@ -82,7 +81,47 @@ var joinHandler = robot.Command{
 	},
 }
 
-func estractCommand(update *message.Update) (command string, payload []string) {
+var publishHandler = robot.Command{
+	Description: "Publish a new event",
+	Trigger:     "/publish",
+	ReplyAt:     message.MESSAGE + message.CALLBACK_QUERY,
+	CallFunc: func(bot *robot.Bot, update *message.Update) message.Any {
+		var _, payload = extractCommand(update)
+		if len(payload) == 0 {
+			return buildCalendarMessage("Select a day")
+		}
+
+		pusblishEvent(bot.ChatID, Event{
+			name:  update.CallbackQuery.From.FirstName + " personal event",
+			dates: map[string][]int64{payload[0]: nil},
+		})
+		update.CallbackQuery.Delete()
+
+		return message.Text{
+			"Event published share this command to make people join:\n/start " + strconv.Itoa(int(bot.ChatID)) + "\n",
+			nil,
+		}
+	},
+}
+
+func buildCalendarMessage(text string) message.Text {
+	var msg = message.Text{"Invalid invitation link", nil}
+
+	buttons := make([]tgui.InlineButton, 30)
+	for i := range buttons {
+		day := strconv.Itoa(i+1)
+		buttons[i] = tgui.InlineCaller(day, "/publish", day)
+	}
+
+	msg.ClipInlineKeyboard(tgui.Arrange(7, buttons...))
+	return msg
+}
+
+func pusblishEvent(userID int64, event Event) {
+	organizers[userID] = &event
+}
+
+func extractCommand(update *message.Update) (command string, payload []string) {
 	if update.CallbackQuery != nil {
 		command = update.CallbackQuery.Data
 	} else if message := update.FromMessage(); message != nil {
@@ -104,7 +143,7 @@ func retreiveEvent(invitation string) *Event {
 	return organizers[int64(userID)]
 }
 
-func buildEventMessage(event Event, invitation string, userID int64) message.Text {
+func buildDateListMessage(event Event, invitation string, userID int64) message.Text {
 	var (
 		msg = message.Text{event.name, nil}
 		kbd = make([][]tgui.InlineButton, len(event.dates))
