@@ -15,7 +15,7 @@ import (
 var organizers = map[int64]*Calendar{}
 
 func main() {
-	robot.Start(startHandler, joinHandler, publishHandler)
+	robot.Start(startHandler, joinHandler, publishHandler, closeHandler)
 }
 
 var startHandler = robot.Command{
@@ -95,6 +95,15 @@ var publishHandler = robot.Command{
 	},
 }
 
+var closeHandler = robot.Command{
+	Trigger: "/close",
+	ReplyAt: message.CALLBACK_QUERY,
+	CallFunc: func(bot *robot.Bot, update *message.Update) message.Any {
+		collapse(update.CallbackQuery, "")
+		return nil
+	},
+}
+
 func AddCalendar(user echotron.User, dates ...string) *Calendar {
 	var calendar = &Calendar{
 		name:        user.FirstName + " calendar",
@@ -132,7 +141,10 @@ func buildCalendarMessage(text string) message.Text {
 		buttons[i] = tgui.InlineCaller(day, "/publish", day)
 	}
 
-	msg.ClipInlineKeyboard(tgui.Arrange(7, buttons...))
+	msg.ClipInlineKeyboard(append(
+		tgui.Arrange(7, buttons...),
+		tgui.Wrap(tgui.InlineCaller("❌ Cancel", "/close")),
+	))
 	return msg
 }
 
@@ -169,7 +181,7 @@ func retreiveCalendar(invitation string) *Calendar {
 func buildDateListMessage(c Calendar, userID int64) message.Text {
 	var (
 		msg = message.Text{c.name, nil}
-		kbd = make([][]tgui.InlineButton, len(c.dates))
+		kbd = make([][]tgui.InlineButton, len(c.dates)+1)
 		i   = 0
 	)
 
@@ -185,6 +197,7 @@ func buildDateListMessage(c Calendar, userID int64) message.Text {
 		kbd[i] = tgui.Wrap(tgui.InlineCaller(caption, "/join", c.invitation, date))
 		i++
 	}
+	kbd[i] = tgui.Wrap(tgui.InlineCaller("❌ Close", "/close"))
 
 	return *msg.ClipInlineKeyboard(kbd)
 }
