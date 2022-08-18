@@ -8,6 +8,8 @@ import (
 	"github.com/DazFather/parrbot/message"
 	"github.com/DazFather/parrbot/robot"
 	"github.com/DazFather/parrbot/tgui"
+
+	"github.com/NicoNex/echotron/v3"
 )
 
 type Event struct {
@@ -69,13 +71,12 @@ var joinHandler = robot.Command{
 
 		if event := retreiveEvent(payload[0]); event != nil {
 			event.join(payload[1], update.CallbackQuery.From.ID)
-			update.CallbackQuery.EditText(
-				"✅ You joined this event",
-				tgui.InlineKbdOpt(nil, [][]tgui.InlineButton{{
-					tgui.InlineCaller("🔙 Back", "/start", payload[0]),
-				}}),
-			)
-			return nil
+			update.CallbackQuery.Answer(&echotron.CallbackQueryOptions{
+				Text:      "✅ You joined this event",
+				CacheTime: 3600,
+			})
+			update.CallbackQuery.Delete()
+			return buildDateListMessage(*event, payload[0], bot.ChatID)
 		}
 		return message.Text{"Invalid invitation link", nil}
 	},
@@ -109,7 +110,7 @@ func buildCalendarMessage(text string) message.Text {
 
 	buttons := make([]tgui.InlineButton, 30)
 	for i := range buttons {
-		day := strconv.Itoa(i+1)
+		day := strconv.Itoa(i + 1)
 		buttons[i] = tgui.InlineCaller(day, "/publish", day)
 	}
 
