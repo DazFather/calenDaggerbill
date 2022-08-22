@@ -22,7 +22,7 @@ type Calendar struct {
 }
 
 func (c *Calendar) addDate(date time.Time) {
-	c.dates[date.String()] = new(Event)
+	c.dates[formatDate(date)] = new(Event)
 }
 
 func (c *Calendar) joinDate(date time.Time, userID int64) error {
@@ -30,7 +30,7 @@ func (c *Calendar) joinDate(date time.Time, userID int64) error {
 		return INVALID_CALENDAR
 	}
 
-	var event = c.dates[date.String()]
+	var event = c.dates[formatDate(date)]
 	if event == nil {
 		return INVALID_EVENT
 	}

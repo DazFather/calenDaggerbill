@@ -13,7 +13,19 @@ import (
 	"github.com/NicoNex/echotron/v3"
 )
 
-const DATETIME_FROMAT = "2006-01-02 15:04:05.999999999 -0700 MST"
+const DATETIME_FROMAT = "02/01/2006T15:04"
+
+func extractDate(source string) *time.Time {
+	var date, err = time.Parse(DATETIME_FROMAT, source)
+	if err == nil {
+		return &date
+	}
+	return nil
+}
+
+func formatDate(date time.Time) string {
+	return date.Format(DATETIME_FROMAT)
+}
 
 var organizers = map[int64]*Calendar{}
 
@@ -52,12 +64,12 @@ var joinHandler = robot.Command{
 			return message.Text{"Invalid joining: " + update.CallbackQuery.Data, nil}
 		} else if userID := retreiveOwner(payload[0]); userID == nil {
 			return message.Text{"Invalid invitation: " + payload[0], nil}
-		} else if d, err := time.Parse(DATETIME_FROMAT, payload[1]); err != nil {
+		} else if d := extractDate(payload[1]); d == nil {
 			return message.Text{"Invalid date: " + payload[1], nil}
-		} else if err := calendar.joinDate(d, bot.ChatID); err != nil {
+		} else if err := organizers[*userID].joinDate(*d, bot.ChatID); err != nil {
 			return message.Text{"🚫 " + err.Error(), nil}
 		} else {
-			date, ownerID, calendar = payload[0], *userID, organizers[*userID]
+			date, ownerID, calendar = strings.Replace(payload[1], "T", " ", 1), *userID, organizers[*userID]
 		}
 
 		collapse(update.CallbackQuery, "✅ You joined this event")
@@ -170,7 +182,7 @@ func buildCalendarMessage(text string) message.Text {
 		buttons[i-1] = tgui.InlineCaller(
 			strconv.Itoa(i),
 			"/publish",
-			now.AddDate(0, 0, i).String(),
+			formatDate(now.AddDate(0, 0, i-today)),
 		)
 	}
 
@@ -219,7 +231,7 @@ func buildDateListMessage(c Calendar, userID int64) message.Text {
 	)
 
 	for date, event := range c.dates {
-		var caption string = date
+		var caption string = strings.Replace(date, "T", " ", 1)
 		if n := event.countAttendee(); n > 0 {
 			if event.hasJoined(userID) {
 				caption = "✅ " + caption + " - 👥" + strconv.Itoa(n-1) + " + 1 (You)"
