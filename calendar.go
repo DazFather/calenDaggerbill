@@ -86,6 +86,14 @@ func (d Date) Skip(years int, months int, days int) Date {
 	return Date(d.Time().AddDate(years, months, days))
 }
 
+func (d Date) IsBefore(date Date) bool {
+	return d.Time().Before(date.Time())
+}
+
+func (d Date) IsAfter(date Date) bool {
+	return d.Time().After(date.Time())
+}
+
 func (c *Calendar) addDate(date Date) {
 	c.dates[date.Format()] = new(Event)
 }

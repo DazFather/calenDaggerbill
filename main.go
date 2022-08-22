@@ -107,7 +107,7 @@ var publishHandler = robot.Command{
 
 			var (
 				hasCalendar bool = organizers[bot.ChatID] != nil
-				calendar         = AddToCalendar(*update.CallbackQuery.From, date)
+				link             = GetShareLink(*AddToCalendar(*update.CallbackQuery.From, date))
 			)
 			notify(update.CallbackQuery, "📅 Date: "+beautifyDate(date.Format())+" added to your calendar ✔️")
 			if !hasCalendar {
@@ -115,7 +115,7 @@ var publishHandler = robot.Command{
 					strings.Join([]string{
 						"✔️ <i>You calendar has been created</i>",
 						"Use again the previous message to add a new avaiable date",
-						"Share this to make people join: <code>/start " + calendar.invitation + "</code>",
+						"Share this to make people join: <code>" + link + "</code>",
 					}, "\n"),
 					&echotron.MessageOptions{ParseMode: "HTML"},
 				}
@@ -169,6 +169,14 @@ func AddToCalendar(user echotron.User, dates ...Date) *Calendar {
 	return calendar
 }
 
+func GetShareLink(c Calendar) string {
+	var res, err = message.API().GetMe()
+	if err != nil || res.Result == nil {
+		return "/start " + c.invitation
+	}
+	return "t.me/" + res.Result.Username + "?start=" + c.invitation
+}
+
 func collapse(callback *message.CallbackQuery, message string) {
 	if callback == nil {
 		return
@@ -188,7 +196,7 @@ func buildCalendarMessage(date Date, text string) message.Text {
 		weekday          = date.MonthStart().Week()
 		buttons          = make([]tgui.InlineButton, monthDays+weekday)
 		row              []tgui.InlineButton
-		now              = Now().Time()
+		now              = Now()
 		msg              = message.Text{text + month.String(), nil}
 	)
 
@@ -204,7 +212,7 @@ func buildCalendarMessage(date Date, text string) message.Text {
 			day   Date   = date.Skip(0, 0, i)
 		)
 
-		if day.Time().Before(now) {
+		if day.IsBefore(now) {
 			row[i] = tgui.InlineCaller("🚫"+label, "/alert", "❌ Cannot create an event in this day")
 		} else {
 			row[i] = tgui.InlineCaller(label, "/publish", day.Format(), "add")
