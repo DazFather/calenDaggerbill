@@ -1,6 +1,7 @@
 package main
 
 import (
+	"time"
 	//"fmt"
 	"strconv"
 	"strings"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/NicoNex/echotron/v3"
 )
+
+const DATETIME_FROMAT = "2006-01-02 15:04:05.999999999 -0700 MST"
 
 var organizers = map[int64]*Calendar{}
 
@@ -49,12 +52,12 @@ var joinHandler = robot.Command{
 			return message.Text{"Invalid joining: " + update.CallbackQuery.Data, nil}
 		} else if userID := retreiveOwner(payload[0]); userID == nil {
 			return message.Text{"Invalid invitation: " + payload[0], nil}
-		} else {
-			date, ownerID, calendar = payload[1], *userID, organizers[*userID]
-		}
-
-		if err := calendar.joinDate(date, bot.ChatID); err != nil {
+		} else if d, err := time.Parse(DATETIME_FROMAT, payload[1]); err != nil {
+			return message.Text{"Invalid date: " + payload[1], nil}
+		} else if err := calendar.joinDate(d, bot.ChatID); err != nil {
 			return message.Text{"🚫 " + err.Error(), nil}
+		} else {
+			date, ownerID, calendar = payload[0], *userID, organizers[*userID]
 		}
 
 		collapse(update.CallbackQuery, "✅ You joined this event")
@@ -69,18 +72,25 @@ var publishHandler = robot.Command{
 	Trigger:     "/publish",
 	ReplyAt:     message.MESSAGE + message.CALLBACK_QUERY,
 	CallFunc: func(bot *robot.Bot, update *message.Update) message.Any {
-		var _, payload = extractCommand(update)
-		if len(payload) == 0 {
+		var (
+			date    time.Time
+			dateStr string
+		)
+		if _, payload := extractCommand(update); len(payload) == 0 {
 			return buildCalendarMessage("Select a day")
+		} else if d, err := time.Parse(DATETIME_FROMAT, payload[0]); err != nil {
+			return message.Text{"Invaid date: " + err.Error(), nil}
+		} else {
+			date, dateStr = d, payload[0]
 		}
 
 		if calendar := organizers[bot.ChatID]; calendar != nil {
-			calendar.addDate(payload[0])
-			collapse(update.CallbackQuery, "📅 Date: "+payload[0]+" added to your calendar ✔️")
+			calendar.addDate(date)
+			collapse(update.CallbackQuery, "📅 Date: "+dateStr+" added to your calendar ✔️")
 			return nil
 		}
 
-		calendar := AddCalendar(*update.CallbackQuery.From, payload[0])
+		calendar := AddCalendar(*update.CallbackQuery.From, date)
 
 		tgui.ShowMessage(
 			*update,
@@ -104,7 +114,7 @@ var closeHandler = robot.Command{
 	},
 }
 
-func AddCalendar(user echotron.User, dates ...string) *Calendar {
+func AddCalendar(user echotron.User, dates ...time.Time) *Calendar {
 	var calendar = &Calendar{
 		name:        user.FirstName + " calendar",
 		description: user.FirstName + " personal event",
@@ -133,10 +143,18 @@ func collapse(callback *message.CallbackQuery, message string) {
 }
 
 func buildCalendarMessage(text string) message.Text {
-	var msg = message.Text{"Invalid invitation link", nil}
+	var (
+		now       = time.Now()
+		today     = now.Day()
+		msg       = message.Text{text + "\n" + now.Month().String(), nil}
+		monthDays = now.AddDate(0, 1, -today).Day()
+	)
 
-	buttons := make([]tgui.InlineButton, 30)
-	for i := range buttons {
+	buttons := make([]tgui.InlineButton, monthDays)
+	for i := 0; i < today; i++ {
+		buttons[i] = tgui.InlineCaller("🚫", "/publish")
+	}
+	for i := today; i < monthDays; i++ {
 		day := strconv.Itoa(i + 1)
 		buttons[i] = tgui.InlineCaller(day, "/publish", day)
 	}

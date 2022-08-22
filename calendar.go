@@ -1,5 +1,7 @@
 package main
 
+import "time"
+
 type CalendarError string
 
 const (
@@ -19,16 +21,16 @@ type Calendar struct {
 	dates       map[string]*Event
 }
 
-func (c *Calendar) addDate(date string) {
-	c.dates[date] = new(Event)
+func (c *Calendar) addDate(date time.Time) {
+	c.dates[date.String()] = new(Event)
 }
 
-func (c *Calendar) joinDate(date string, userID int64) error {
+func (c *Calendar) joinDate(date time.Time, userID int64) error {
 	if c == nil {
 		return INVALID_CALENDAR
 	}
 
-	var event = c.dates[date]
+	var event = c.dates[date.String()]
 	if event == nil {
 		return INVALID_EVENT
 	}
