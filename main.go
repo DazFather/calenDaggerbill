@@ -18,7 +18,7 @@ const DATETIME_FROMAT = "2006-01-02 15:04:05.999999999 -0700 MST"
 var organizers = map[int64]*Calendar{}
 
 func main() {
-	robot.Start(startHandler, joinHandler, publishHandler, closeHandler)
+	robot.Start(startHandler, joinHandler, publishHandler, closeHandler, alertHandler)
 }
 
 var startHandler = robot.Command{
@@ -109,7 +109,19 @@ var closeHandler = robot.Command{
 	Trigger: "/close",
 	ReplyAt: message.CALLBACK_QUERY,
 	CallFunc: func(bot *robot.Bot, update *message.Update) message.Any {
-		collapse(update.CallbackQuery, "")
+		collapse(update.CallbackQuery, strings.TrimPrefix(update.CallbackQuery.Data, "/close"))
+		return nil
+	},
+}
+
+var alertHandler = robot.Command{
+	Trigger: "/alert",
+	ReplyAt: message.CALLBACK_QUERY,
+	CallFunc: func(bot *robot.Bot, update *message.Update) message.Any {
+		update.CallbackQuery.Answer(&echotron.CallbackQueryOptions{
+			Text:      strings.TrimPrefix(update.CallbackQuery.Data, "/alert"),
+			CacheTime: 3600,
+		})
 		return nil
 	},
 }
@@ -152,16 +164,19 @@ func buildCalendarMessage(text string) message.Text {
 
 	buttons := make([]tgui.InlineButton, monthDays)
 	for i := 0; i < today; i++ {
-		buttons[i] = tgui.InlineCaller("🚫", "/publish")
+		buttons[i] = tgui.InlineCaller("🚫", "/alert", "❌ Cannot create an event in this day")
 	}
-	for i := today; i < monthDays; i++ {
-		day := strconv.Itoa(i + 1)
-		buttons[i] = tgui.InlineCaller(day, "/publish", day)
+	for i := today + 1; i <= monthDays; i++ {
+		buttons[i-1] = tgui.InlineCaller(
+			strconv.Itoa(i),
+			"/publish",
+			now.AddDate(0, 0, i).String(),
+		)
 	}
 
 	msg.ClipInlineKeyboard(append(
 		tgui.Arrange(7, buttons...),
-		tgui.Wrap(tgui.InlineCaller("❌ Cancel", "/close")),
+		tgui.Wrap(tgui.InlineCaller("❌ Cancel", "/close", "✔️ Operation cancelled")),
 	))
 	return msg
 }
