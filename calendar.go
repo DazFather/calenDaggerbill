@@ -20,10 +20,11 @@ func (e CalendarError) Error() string {
 }
 
 type Calendar struct {
-	name        string
-	description string
-	invitation  string
-	dates       map[string]*Event
+	notification bool
+	name         string
+	description  string
+	invitation   string
+	dates        map[string]*Event
 }
 
 type Date time.Time
@@ -94,8 +95,28 @@ func (d Date) IsAfter(date Date) bool {
 	return d.Time().After(date.Time())
 }
 
-func (c *Calendar) addDate(date Date) {
-	c.dates[date.Format()] = new(Event)
+func (d Date) When(do func()) {
+	go func() {
+		<-time.After(d.Time().Sub(time.Now()))
+		do()
+	}()
+}
+
+func (c *Calendar) addDate(date Date) (confirm bool) {
+	if c.dates[date.Format()] == nil {
+		c.dates[date.Format()] = new(Event)
+		confirm = true
+	}
+	return
+}
+
+func (c *Calendar) removeDate(date Date) (deleted *Event) {
+	key := date.Format()
+	deleted = c.dates[key]
+	if deleted != nil {
+		delete(c.dates, key)
+	}
+	return
 }
 
 func (c *Calendar) joinDate(date Date, userID int64) error {
@@ -113,6 +134,10 @@ func (c *Calendar) joinDate(date Date, userID int64) error {
 
 	event.join(userID)
 	return nil
+}
+
+func (c Calendar) CurrentAttendee(forDate Date) []int64 {
+	return c.dates[forDate.Format()].attendee
 }
 
 type Event struct {

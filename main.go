@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 
@@ -42,29 +43,49 @@ var joinHandler = robot.Command{
 	Trigger: "/join",
 	ReplyAt: message.CALLBACK_QUERY,
 	CallFunc: func(bot *robot.Bot, update *message.Update) message.Any {
-		var (
-			date     string
-			ownerID  int64
-			calendar *Calendar
-		)
+		var calendar *Calendar
 
 		if _, payload := extractCommand(update); len(payload) != 2 {
 			return message.Text{"Invalid joining: " + update.CallbackQuery.Data, nil}
-		} else if userID := retreiveOwner(payload[0]); userID == nil {
-			return message.Text{"Invalid invitation: " + payload[0], nil}
-		} else if d := ParseDate(payload[1]); d == nil {
-			return message.Text{"Invalid date: " + payload[1], nil}
-		} else if err := organizers[*userID].joinDate(*d, bot.ChatID); err != nil {
+		} else if c, err := JoinEvent(*update.CallbackQuery.From, payload[0], payload[1]); err != nil {
 			return message.Text{"🚫 " + err.Error(), nil}
 		} else {
-			date, ownerID, calendar = beautifyDate(payload[1]), *userID, organizers[*userID]
+			calendar = c
 		}
 
 		collapse(update.CallbackQuery, "✅ You joined this event")
-		name := update.CallbackQuery.From.Username
-		message.Text{"+ 1: " + name + " joined your event in date: " + date, nil}.Send(ownerID)
 		return buildDateListMessage(*calendar, bot.ChatID)
 	},
+}
+
+func JoinEvent(user echotron.User, invitation, rawDate string) (calendar *Calendar, err error) {
+	var ownerID *int64 = retreiveOwner(invitation)
+	if ownerID == nil {
+		return nil, errors.New("Invalid invitation")
+	}
+
+	if date := ParseDate(rawDate); date == nil {
+		err = errors.New("Invalid date")
+	} else {
+		calendar = organizers[*ownerID]
+		err = calendar.joinDate(*date, user.ID)
+	}
+	if err != nil {
+		return
+	}
+
+	if calendar.notification {
+		name := user.Username
+		if name == "" {
+			name = user.FirstName
+		}
+		message.Text{
+			"+ 1: " + name + " joined your event in date: " + beautifyDate(rawDate),
+			nil,
+		}.Send(*ownerID)
+	}
+
+	return
 }
 
 var publishHandler = robot.Command{
@@ -154,19 +175,48 @@ func AddToCalendar(user echotron.User, dates ...Date) *Calendar {
 	var calendar *Calendar = organizers[user.ID]
 	if calendar == nil {
 		calendar = &Calendar{
-			name:        user.FirstName + " calendar",
-			description: user.FirstName + " personal event",
-			invitation:  strconv.Itoa(int(user.ID)),
-			dates:       make(map[string]*Event),
+			name:         user.FirstName + " calendar",
+			description:  user.FirstName + " personal event",
+			notification: true,
+			invitation:   strconv.Itoa(int(user.ID)),
+			dates:        make(map[string]*Event, len(dates)),
 		}
 		organizers[user.ID] = calendar
 	}
 
 	for _, date := range dates {
-		calendar.addDate(date)
+		if !calendar.addDate(date) {
+			continue
+		}
+
+		var strDate string = beautifyDate(date.Format())
+
+		date.Skip(0, 0, -7).When(
+			Remind(calendar, date, "🔔 Don't forget the "+calendar.name+", is cooming soon: "+strDate),
+		)
+
+		date.Skip(0, 0, -1).When(
+			Remind(calendar, date, "🔔 Tomorrow "+strDate+", there will be "+calendar.name+" waiting for you!"),
+		)
+
+		date.When(func() {
+			calendar.removeDate(date)
+		})
 	}
 
 	return calendar
+}
+
+func Remind(calendar *Calendar, date Date, text string) (reminder func()) {
+	return func() {
+		if calendar == nil || !calendar.notification {
+			return
+		}
+
+		for userID := range calendar.CurrentAttendee(date) {
+			message.Text{text, nil}.Send(int64(userID))
+		}
+	}
 }
 
 func GetShareLink(c Calendar) string {
