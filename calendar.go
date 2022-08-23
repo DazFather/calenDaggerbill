@@ -140,6 +140,23 @@ func (c Calendar) CurrentAttendee(forDate Date) []int64 {
 	return c.dates[forDate.Format()].attendee
 }
 
+func (c Calendar) AllCurrentAttendee() []int64 {
+	var exists = make(map[int64]bool)
+	for _, event := range c.dates {
+		for _, userID := range event.attendee {
+			exists[userID] = true
+		}
+	}
+
+	var attendee = make([]int64, len(exists))
+	i := 0
+	for userID := range exists {
+		attendee[i] = userID
+		i++
+	}
+	return attendee
+}
+
 type Event struct {
 	attendee []int64
 }

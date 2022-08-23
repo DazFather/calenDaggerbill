@@ -16,10 +16,13 @@ func beautifyDate(date string) string {
 	return strings.Replace(date, "T", " ", 1)
 }
 
-var organizers = map[int64]*Calendar{}
+var (
+	organizers      = map[int64]*Calendar{}
+	DEFAULT_MSG_OPT = &echotron.MessageOptions{ParseMode: "HTML"}
+)
 
 func main() {
-	robot.Start(startHandler, joinHandler, publishHandler, closeHandler, alertHandler)
+	robot.Start(startHandler, joinHandler, publishHandler, closeHandler, alertHandler, editHandler)
 }
 
 var startHandler = robot.Command{
@@ -35,7 +38,7 @@ var startHandler = robot.Command{
 		if calendar := retreiveCalendar(payload[0]); calendar != nil {
 			return buildDateListMessage(*calendar, bot.ChatID)
 		}
-		return message.Text{"Invalid invitation link", nil}
+		return message.Text{"🚫 Invalid invitation link", nil}
 	},
 }
 
@@ -56,36 +59,6 @@ var joinHandler = robot.Command{
 		collapse(update.CallbackQuery, "✅ You joined this event")
 		return buildDateListMessage(*calendar, bot.ChatID)
 	},
-}
-
-func JoinEvent(user echotron.User, invitation, rawDate string) (calendar *Calendar, err error) {
-	var ownerID *int64 = retreiveOwner(invitation)
-	if ownerID == nil {
-		return nil, errors.New("Invalid invitation")
-	}
-
-	if date := ParseDate(rawDate); date == nil {
-		err = errors.New("Invalid date")
-	} else {
-		calendar = organizers[*ownerID]
-		err = calendar.joinDate(*date, user.ID)
-	}
-	if err != nil {
-		return
-	}
-
-	if calendar.notification {
-		name := user.Username
-		if name == "" {
-			name = user.FirstName
-		}
-		message.Text{
-			"+ 1: " + name + " joined your event in date: " + beautifyDate(rawDate),
-			nil,
-		}.Send(*ownerID)
-	}
-
-	return
 }
 
 var publishHandler = robot.Command{
@@ -135,14 +108,63 @@ var publishHandler = robot.Command{
 				msg = message.Text{
 					strings.Join([]string{
 						"✔️ <i>You calendar has been created</i>",
-						"Use again the previous message to add a new avaiable date",
+						"Use again the previous message to add a new avaiable date or use /set to modify the name or description",
 						"Share this to make people join: <code>" + link + "</code>",
 					}, "\n"),
-					&echotron.MessageOptions{ParseMode: "HTML"},
+					DEFAULT_MSG_OPT,
 				}
 			}
 		}
 		return msg
+	},
+}
+
+var editHandler = robot.Command{
+	Description: "Edit your calendar",
+	Trigger:     "/set",
+	ReplyAt:     message.MESSAGE,
+	CallFunc: func(bot *robot.Bot, update *message.Update) message.Any {
+		var (
+			calendar                 = organizers[bot.ChatID]
+			previous, field, current string
+		)
+		if calendar == nil {
+			return message.Text{"🚫 You don't have a calendar yet, use the command /publish to create a new one", nil}
+		}
+
+		if _, payload := extractCommand(update); len(payload) < 2 {
+			return message.Text{
+				"🆘 Use this command to set name or description of your calendar. " +
+					"To do so just use the command followed by <i>name</i> or <i>description</i>" +
+					" (depending by what do you want to change) and then the new value. Ex:\n" +
+					" <code>/set name My new AMAZING✨ name</code>",
+				DEFAULT_MSG_OPT,
+			}
+		} else {
+			field, current = payload[0], strings.Join(payload[1:], " ")
+		}
+
+		switch strings.ToLower(field) {
+		case "name":
+			previous = calendar.name
+			calendar.name = current
+		case "description":
+			previous = calendar.description
+			calendar.description = current
+		default:
+			return message.Text{
+				"🚫 Invaild specifier for this command: \"<i>" + field + "</i>\", use <code>name</code> or <code>description</code> instead",
+				DEFAULT_MSG_OPT,
+			}
+		}
+
+		for _, userID := range calendar.AllCurrentAttendee() {
+			message.Text{
+				"❕ The " + field + " of a calendar that you have joined changed:\n<i>" + previous + "</i> ➡️ <b>" + current + "</b>",
+				DEFAULT_MSG_OPT,
+			}.Send(int64(userID))
+		}
+		return message.Text{"Calendar's " + field + " successfully edited, all attendee has been warned", nil}
 	},
 }
 
@@ -205,6 +227,38 @@ func AddToCalendar(user echotron.User, dates ...Date) *Calendar {
 	}
 
 	return calendar
+}
+
+func JoinEvent(user echotron.User, invitation, rawDate string) (calendar *Calendar, err error) {
+	var ownerID *int64 = retreiveOwner(invitation)
+	if ownerID == nil {
+		return nil, errors.New("Invalid invitation")
+	}
+
+	if date := ParseDate(rawDate); date == nil {
+		err = errors.New("Invalid date")
+	} else {
+		calendar = organizers[*ownerID]
+		err = calendar.joinDate(*date, user.ID)
+	}
+	if err != nil {
+		return
+	}
+
+	if calendar.notification {
+		name := user.Username
+		if name == "" {
+			name = user.FirstName
+		} else {
+			name = "@" + name
+		}
+		message.Text{
+			"🔔 + 1: " + name + " joined your event in date: " + beautifyDate(rawDate),
+			nil,
+		}.Send(*ownerID)
+	}
+
+	return
 }
 
 func Remind(calendar *Calendar, date Date, text string) (reminder func()) {
@@ -321,7 +375,10 @@ func retreiveCalendar(invitation string) *Calendar {
 
 func buildDateListMessage(c Calendar, userID int64) message.Text {
 	var (
-		msg = message.Text{c.name, nil}
+		msg = message.Text{
+			"🛎 <b>" + c.name + "</b>\n" + c.description + "\n<i>Tap one (or more) of following dates to join</i>",
+			DEFAULT_MSG_OPT,
+		}
 		kbd = make([][]tgui.InlineButton, len(c.dates)+1)
 		i   = 0
 	)
