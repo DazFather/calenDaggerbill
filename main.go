@@ -24,7 +24,16 @@ var (
 
 func main() {
 	go clearUnused(time.Hour * 24 * 30 * 6)
-	robot.Start(startHandler, joinHandler, publishHandler, closeHandler, alertHandler, editHandler, setHandler)
+	robot.Start(
+		startHandler,   // start menu & handle join link
+		joinHandler,    // confirm join
+		publishHandler, // create a new calendar
+		closeHandler,   // close any menu and show toast alert
+		alertHandler,   // show toast alert
+		editHandler,    // edit calendar menu
+		setHandler,     // confirm edit calendar menu
+		linkHandler,    // show shareable link
+	)
 }
 
 func clearUnused(every time.Duration) {
@@ -39,7 +48,7 @@ func clearUnused(every time.Duration) {
 }
 
 var startHandler = robot.Command{
-	Description: "Start the bot",
+	Description: "Main menu",
 	Trigger:     "/start",
 	ReplyAt:     message.MESSAGE + message.CALLBACK_QUERY,
 	CallFunc: func(bot *robot.Bot, update *message.Update) message.Any {
