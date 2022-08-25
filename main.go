@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/DazFather/parrbot/message"
 	"github.com/DazFather/parrbot/robot"
@@ -22,7 +23,19 @@ var (
 )
 
 func main() {
+	go clearUnused(time.Hour * 24 * 30 * 6)
 	robot.Start(startHandler, joinHandler, publishHandler, closeHandler, alertHandler, editHandler, setHandler)
+}
+
+func clearUnused(every time.Duration) {
+	c := time.Tick(every)
+	for _ = range c {
+		for userID, calendar := range organizers {
+			if len(calendar.dates) == 0 && calendar.UnusedFor() >= every {
+				delete(organizers, userID)
+			}
+		}
+	}
 }
 
 var startHandler = robot.Command{
@@ -336,13 +349,12 @@ func toString(value bool) string {
 func AddToCalendar(user echotron.User, dates ...Date) *Calendar {
 	var calendar *Calendar = organizers[user.ID]
 	if calendar == nil {
-		calendar = &Calendar{
-			name:         user.FirstName + " calendar",
-			description:  user.FirstName + " personal event",
-			notification: true,
-			invitation:   strconv.Itoa(int(user.ID)),
-			dates:        make(map[string]*Event, len(dates)),
-		}
+		calendar = NewCalendar(
+			user.FirstName+" calendar",
+			user.FirstName+" personal event",
+			strconv.Itoa(int(user.ID)),
+		)
+		calendar.dates = make(map[string]*Event, len(dates))
 		organizers[user.ID] = calendar
 	}
 

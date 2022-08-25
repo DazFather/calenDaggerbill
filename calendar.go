@@ -24,10 +24,25 @@ type Calendar struct {
 	name         string
 	description  string
 	invitation   string
+	lastTimeUsed Date
 	dates        map[string]*Event
 }
 
 type Date time.Time
+
+func NewCalendar(name, description, invitation string) *Calendar {
+	return &Calendar{
+		name:         name,
+		description:  description,
+		notification: true,
+		invitation:   invitation,
+		lastTimeUsed: Now(),
+	}
+}
+
+func (c Calendar) UnusedFor() time.Duration {
+	return time.Since(c.lastTimeUsed.Time())
+}
 
 func ParseDate(source string) *Date {
 	switch strings.ToLower(source) {
@@ -103,6 +118,7 @@ func (d Date) When(do func()) {
 }
 
 func (c *Calendar) addDate(date Date) (confirm bool) {
+	c.lastTimeUsed = Now()
 	if c.dates[date.Format()] == nil {
 		c.dates[date.Format()] = new(Event)
 		confirm = true
@@ -111,6 +127,7 @@ func (c *Calendar) addDate(date Date) (confirm bool) {
 }
 
 func (c *Calendar) removeDate(date Date) (deleted *Event) {
+	c.lastTimeUsed = Now()
 	key := date.Format()
 	deleted = c.dates[key]
 	if deleted != nil {
@@ -120,6 +137,7 @@ func (c *Calendar) removeDate(date Date) (deleted *Event) {
 }
 
 func (c *Calendar) joinDate(date Date, userID int64) error {
+	c.lastTimeUsed = Now()
 	if c == nil {
 		return INVALID_CALENDAR
 	}
