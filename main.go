@@ -64,6 +64,7 @@ var startHandler = robot.Command{
 				tgui.InlineKbdOpt(opts, [][]tgui.InlineButton{
 					{tgui.InlineCaller("➕ Add events", "/publish", now)},
 					{tgui.InlineCaller("📝 Edit calendar", "/edit")},
+					{tgui.InlineCaller("📨 Invite users", "/link")},
 				})
 			} else {
 				text = "👋 <b>Welcome, I'm Calen-Daggerbill!</b> 🐦\n" +
@@ -71,7 +72,7 @@ var startHandler = robot.Command{
 					" robo-hummingbird that will assist you to mange your calendar</i>" +
 					"\n\nUsing me is very easy and free:" +
 					"\n First of all you need to create a calendar, " +
-					"<i>use the button below or the command or the command</i> /publish"
+					"<i>use the button below or the command </i> /publish"
 
 				tgui.InlineKbdOpt(opts, [][]tgui.InlineButton{{
 					tgui.InlineCaller("🆕 Create new calendar", "/publish", now),
@@ -320,6 +321,28 @@ var alertHandler = robot.Command{
 	},
 }
 
+var linkHandler = robot.Command{
+	Description: "Get the shareable link to your calendar",
+	Trigger:     "/link",
+	ReplyAt:     message.MESSAGE + message.CALLBACK_QUERY,
+	CallFunc: func(bot *robot.Bot, update *message.Update) message.Any {
+		var calendar = organizers[bot.ChatID]
+		if calendar == nil {
+			err := "You don't have a calendar yet, use the command /publish to create a new one"
+			if update.CallbackQuery == nil {
+				return buildErrorMessage(err)
+			}
+			notify(update.CallbackQuery, "🚫 "+err)
+		}
+
+		tgui.ShowMessage(*update, "Your link: "+calendar.invitation, tgui.InlineKbdOpt(nil, [][]tgui.InlineButton{{
+			tgui.InlineCaller("🔙 Back", "/start"),
+			tgui.InlineCaller("❎ Close", "/close"),
+		}}))
+		return nil
+	},
+}
+
 func notify(callback *message.CallbackQuery, text string) {
 	callback.Answer(&echotron.CallbackQueryOptions{
 		Text:      text,
@@ -528,9 +551,10 @@ func buildCalendarMessage(date Date, text string) message.Text {
 
 func buildDateListMessage(c Calendar, userID int64) message.Text {
 	var (
-		msg = message.Text{
+		options = *DEFAULT_MSG_OPT
+		msg     = message.Text{
 			"🛎 <b>" + c.name + "</b>\n" + c.description + "\n\n<i>Tap one (or more) of following dates to join</i>",
-			DEFAULT_MSG_OPT,
+			&options,
 		}
 		kbd = make([][]tgui.InlineButton, len(c.dates)+1)
 		i   = 0
@@ -548,7 +572,10 @@ func buildDateListMessage(c Calendar, userID int64) message.Text {
 		kbd[i] = tgui.Wrap(tgui.InlineCaller(caption, "/join", c.invitation, date))
 		i++
 	}
-	kbd[i] = tgui.Wrap(tgui.InlineCaller("❎ Close", "/close"))
+	kbd[i] = []tgui.InlineButton{
+		tgui.InlineCaller("🔄Refresh", "/start", c.invitation),
+		tgui.InlineCaller("❎ Close", "/close"),
+	}
 
 	return *msg.ClipInlineKeyboard(kbd)
 }
