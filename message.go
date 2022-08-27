@@ -10,8 +10,9 @@ import (
 func buildCalendarMessage(date Date, text string) message.Text {
 	var (
 		month   = date.Month()
+		monthDays = date.MonthEnd().Day()
 		weekday = date.MonthStart().Week()
-		buttons = make([]tgui.InlineButton, date.MonthEnd().Day()+weekday)
+		buttons = make([]tgui.InlineButton, monthDays+weekday)
 		row     []tgui.InlineButton
 		now     = Now()
 	)
@@ -24,7 +25,7 @@ func buildCalendarMessage(date Date, text string) message.Text {
 	date = date.MonthStart()
 	for i := range row {
 		var (
-			label string = string(i + 1)
+			label string = fmt.Sprint(i + 1)
 			day   Date   = date.Skip(0, 0, i)
 		)
 

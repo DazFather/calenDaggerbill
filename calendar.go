@@ -205,7 +205,7 @@ func (d Date) MonthStart() Date {
 }
 
 func (d Date) MonthEnd() Date {
-	return d.Skip(0, 1, -d.Day()+1)
+	return d.Skip(0, 1, -d.Day()-1)
 }
 
 func (d Date) Skip(years int, months int, days int) Date {
