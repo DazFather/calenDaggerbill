@@ -53,11 +53,11 @@ var startHandler = robot.Command{
 			)
 
 			if calendar := organizers[bot.ChatID]; calendar != nil {
-				text = fmt.Sprint("🐦 <i>Hi! What can I do for you today?</i>\n",
+				text = fmt.Sprint(LOGO, " <i>Hi! What can I do for you today?</i>\n",
 					"Here is some infos about your calendar:",
-					"\n🔔notification: <code>", calendar.notification, "</code>",
+					"\n", NOTIF_ON, "notification: <code>", calendar.notification, "</code>",
 					"\n🎟incoming events: ", len(calendar.dates),
-					"\n👥people reached: ", len(calendar.AllCurrentAttendee()),
+					"\n", PEOPLE, "people reached: ", len(calendar.AllCurrentAttendee()),
 					"\n🏷name: <code>", calendar.name, "</code>",
 					"\n📑description: <code>", calendar.description, "</code>",
 				)
@@ -68,7 +68,7 @@ var startHandler = robot.Command{
 					{tgui.InlineCaller("📨 Invite users", "/link")},
 				})
 			} else {
-				text = fmt.Sprint("👋 <b>Welcome, I'm Calen-Daggerbill!</b> 🐦\n",
+				text = fmt.Sprint("👋 <b>Welcome, I'm Calen-Daggerbill!</b> ", LOGO, "\n",
 					"<i>Your <a href=\"https://github.com/DazFather/calendaggerbill\">open source</a>",
 					" robo-hummingbird that will assist you to mange your calendar</i>",
 					"\n\nUsing me is very easy and free:",
@@ -106,7 +106,7 @@ var joinHandler = robot.Command{
 			calendar = c
 		}
 
-		collapse(update.CallbackQuery, "✅ You joined this event")
+		Collapse(update.CallbackQuery, DONE, "You joined this event")
 		return buildDateListMessage(*calendar, bot.ChatID)
 	},
 }
@@ -149,20 +149,21 @@ var publishHandler = robot.Command{
 				hasCalendar bool = organizers[bot.ChatID] != nil
 				link             = GetShareLink(*AddToCalendar(*update.CallbackQuery.From, date))
 			)
-			notify(update.CallbackQuery, fmt.Sprint("✔️ Date: 📅", date, " added to your calendar "))
+			Notify(update.CallbackQuery, DONE, fmt.Sprint("Date: ", CALENDAR, " ", date, " added to your calendar "))
 			if hasCalendar {
 				break
 			}
 			return genDefaultMessage(
+				DONE,
 				fmt.Sprint(
-					"✅ <b>You calendar has been created</b>\n",
+					"<b>You calendar has been created</b>\n",
 					"Use the previous message or /publish again to add a new avaiable dates\n",
 					"Send /edit to modify your calendar's settings like name, description and notification\n",
 					"Share the following link to make people join your events: ", link,
 				),
 				[]tgui.InlineButton{
 					tgui.InlineCaller("🔙 Back", "/start"),
-					tgui.InlineCaller("❎ Close", "/close"),
+					BTN_CLOSE,
 				},
 			)
 		}
@@ -195,14 +196,15 @@ var editHandler = robot.Command{
 
 		if _, payload := extractCommand(update); len(payload) < 2 {
 			return genDefaultMessage(
+				icon("🆘"),
 				fmt.Sprint(
-					"🆘 Use this command to edit your calendar, at the moment you can change name, description and notification\n",
+					"Use this command to edit your calendar, at the moment you can change name, description and notification\n",
 					"To do so just use the command followed by what you want to edit ",
 					"(<code>name</code>, <code>description</code> or <code>notification</code>)",
 					" and then the new value, ex:\n <code>/edit name My new AMAZING✨ name</code>",
 					"\nFor notification the allowed values are <code>on</code> or <code>off</code> only",
 				),
-				tgui.Wrap(tgui.InlineCaller("❌ Cancel", "/close", "✔️ Operation cancelled")),
+				tgui.Wrap(BTN_CANCEL),
 			)
 		} else {
 			field, suggested = strings.ToLower(payload[0]), strings.Join(payload[1:], " ")
@@ -231,8 +233,8 @@ var editHandler = robot.Command{
 				"\n<b>Confirm the change?</b>",
 			),
 			genDefaultEditOpt([]tgui.InlineButton{
-				tgui.InlineCaller("✅ Confirm", "/set", field, suggested),
-				tgui.InlineCaller("❌ Cancel", "/close", "✔️ Operation cancelled"),
+				tgui.InlineCaller(CONFIRM.Text("Confirm"), "/set", field, suggested),
+				BTN_CANCEL,
 			}),
 		)
 		return nil
@@ -250,11 +252,11 @@ var setHandler = robot.Command{
 			needWarning            bool
 		)
 		if calendar == nil {
-			collapse(callback, "🚫 Unable to set: no calendar found")
+			Collapse(callback, BLOCK, "Unable to set: no calendar found")
 			return nil
 		}
 		if _, payload := extractCommand(update); len(payload) < 2 {
-			collapse(callback, "🚫 Unable to set: invalid command")
+			Collapse(callback, BLOCK, "Unable to set: invalid command")
 			return nil
 		} else {
 			field, value = payload[0], strings.Join(payload[1:], " ")
@@ -273,15 +275,15 @@ var setHandler = robot.Command{
 			calendar.description = value
 			needWarning = true
 		default:
-			collapse(callback, "🚫 Unable to set: invalid field")
+			Collapse(callback, BLOCK, "Unable to set: invalid field")
 		}
 
-		text := "✅ <b>Your calendar has been edited</b>\nCalendar's " + field + " successfully changed to:\n " + value
+		text := "<b>Your calendar has been edited</b>\nCalendar's " + field + " successfully changed to:\n " + value
 		if needWarning {
 			attendee := calendar.AllCurrentAttendee()
 			for _, userID := range attendee {
-				genDefaultMessage(fmt.Sprint(
-					"❕ The ", field, " of a calendar that you have joined changed:\n<i>", previous, "</i> ➡️ <b>", value, "</b>",
+				genDefaultMessage(icon("❕"), fmt.Sprint(
+					"The ", field, " of a calendar that you have joined changed:\n<i>", previous, "</i> ➡️ <b>", value, "</b>",
 				)).Send(int64(userID))
 			}
 			if tot := len(attendee); tot > 0 {
@@ -289,28 +291,10 @@ var setHandler = robot.Command{
 			}
 		}
 
-		tgui.ShowMessage(*update, text, genDefaultEditOpt([]tgui.InlineButton{
+		tgui.ShowMessage(*update, DONE.Text(text), genDefaultEditOpt([]tgui.InlineButton{
 			tgui.InlineCaller("↩️ Turn "+field+" back to "+previous, "/edit", field, previous),
-			tgui.InlineCaller("❎ Close", "/close"),
+			BTN_CLOSE,
 		}))
-		return nil
-	},
-}
-
-var closeHandler = robot.Command{
-	Trigger: "/close",
-	ReplyAt: message.CALLBACK_QUERY,
-	CallFunc: func(bot *robot.Bot, update *message.Update) message.Any {
-		collapse(update.CallbackQuery, strings.TrimPrefix(update.CallbackQuery.Data, "/close"))
-		return nil
-	},
-}
-
-var alertHandler = robot.Command{
-	Trigger: "/alert",
-	ReplyAt: message.CALLBACK_QUERY,
-	CallFunc: func(bot *robot.Bot, update *message.Update) message.Any {
-		notify(update.CallbackQuery, strings.TrimPrefix(update.CallbackQuery.Data, "/alert"))
 		return nil
 	},
 }
@@ -327,22 +311,15 @@ var linkHandler = robot.Command{
 				update.Message.Delete()
 				return buildErrorMessage(err)
 			}
-			notify(update.CallbackQuery, "🚫 "+err)
+			Notify(update.CallbackQuery, BLOCK, err)
 		}
 
 		tgui.ShowMessage(*update, "Your link: "+calendar.invitation, genDefaultEditOpt([]tgui.InlineButton{
 			tgui.InlineCaller("🔙 Back", "/start"),
-			tgui.InlineCaller("❎ Close", "/close"),
+			BTN_CLOSE,
 		}))
 		return nil
 	},
-}
-
-func notify(callback *message.CallbackQuery, text string) {
-	callback.Answer(&echotron.CallbackQueryOptions{
-		Text:      text,
-		CacheTime: 3600,
-	})
 }
 
 func AddToCalendar(user echotron.User, dates ...Date) *Calendar {
@@ -364,11 +341,11 @@ func AddToCalendar(user echotron.User, dates ...Date) *Calendar {
 		}
 
 		date.Skip(0, 0, -7).WhenOccurrs(
-			Remind(calendar, timestamp, fmt.Sprint("🔔 Don't forget the ", calendar.name, ", is cooming soon: ", date)),
+			Remind(calendar, timestamp, fmt.Sprint("Don't forget the ", calendar.name, ", is cooming soon: ", date)),
 		)
 
 		date.Skip(0, 0, -1).WhenOccurrs(
-			Remind(calendar, timestamp, fmt.Sprint("🔔 Tomorrow ", date, ", there will be ", calendar.name, " waiting for you!")),
+			Remind(calendar, timestamp, fmt.Sprint("a Tomorrow ", date, ", there will be ", calendar.name, " waiting for you!")),
 		)
 
 		date.WhenOccurrs(func() {
@@ -422,7 +399,7 @@ func Remind(calendar *Calendar, date FormattedDate, text string) (reminder func(
 		}
 
 		for userID := range calendar.CurrentAttendee(date) {
-			genDefaultMessage(text).Send(int64(userID))
+			genDefaultMessage(NOTIF_ON, text).Send(int64(userID))
 		}
 	}
 }
@@ -433,19 +410,6 @@ func GetShareLink(c Calendar) string {
 		return "/start " + c.invitation
 	}
 	return "t.me/" + res.Result.Username + "?start=" + c.invitation
-}
-
-func collapse(callback *message.CallbackQuery, message string) {
-	if callback == nil {
-		return
-	}
-
-	var opt *echotron.CallbackQueryOptions
-	if message != "" {
-		opt = &echotron.CallbackQueryOptions{Text: message, CacheTime: 3600}
-	}
-	callback.Answer(opt)
-	callback.Delete()
 }
 
 func extractCommand(update *message.Update) (command string, payload []string) {
