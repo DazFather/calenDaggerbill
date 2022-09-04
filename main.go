@@ -314,7 +314,7 @@ var linkHandler = robot.Command{
 			Notify(update.CallbackQuery, BLOCK, err)
 		}
 
-		tgui.ShowMessage(*update, "Your link: "+calendar.invitation, genDefaultEditOpt([]tgui.InlineButton{
+		tgui.ShowMessage(*update, "Your link: "+GetShareLink(*calendar), genDefaultEditOpt([]tgui.InlineButton{
 			tgui.InlineCaller("🔙 Back", "/start"),
 			BTN_CLOSE,
 		}))
