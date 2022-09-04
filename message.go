@@ -9,7 +9,7 @@ import (
 	"github.com/DazFather/parrbot/tgui"
 )
 
-/* --- EMOJI --- */
+/* --- EMOJI ICONS --- */
 type icon string
 
 const (

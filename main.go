@@ -11,7 +11,7 @@ import (
 
 func main() {
 	// Start cleaning unused calendars job
-	ClearUnusedCalendars(DEFAULT_UNUSED_TIME)
+	go Repeat(DEFAULT_UNUSED_TIME, UnusedCalendarsRemover(DEFAULT_UNUSED_TIME))
 	// Start the bot with the following commands:
 	robot.Start(
 		startHandler,   // start menu & handle join link
@@ -310,6 +310,7 @@ var linkHandler = robot.Command{
 
 /* --- UTILITIES --- */
 
+// extractText grabs the text from a given update
 func extractText(update *message.Update) (content string) {
 	if update.CallbackQuery != nil {
 		content = update.CallbackQuery.Data
@@ -320,6 +321,7 @@ func extractText(update *message.Update) (content string) {
 	return
 }
 
+// extractPayload extract the command from an update, remove trigger and split the rest
 func extractPayload(update *message.Update) (payload []string) {
 	var command string = extractText(update)
 	if command == "" {
@@ -333,6 +335,8 @@ func extractPayload(update *message.Update) (payload []string) {
 	return
 }
 
+// extractFieldValue extract the command from an update, remove trigger and split
+// only the next word to the rest (used in /set and /edit)
 func extractFieldValue(update *message.Update) (field string, value string) {
 	var command = extractText(update)
 	if command == "" {

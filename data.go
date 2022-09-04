@@ -9,24 +9,28 @@ import (
 	"github.com/NicoNex/echotron/v3"
 )
 
+// Defaut time after wich a calendar can be consider unused (around 6 months)
 const DEFAULT_UNUSED_TIME = time.Hour * 24 * 30 * 6
 
 var organizers = map[int64]*Calendar{}
 
+// Grab the calendar od a certain user
 func CalendarOf(userID int64) *Calendar {
 	return organizers[userID]
 }
 
-func ClearUnusedCalendars(every time.Duration) {
-	go Repeat(every, func() {
+// UnusedCalendarsRemover returns a function that delete all unused calendars saved
+func UnusedCalendarsRemover(considerUnusedAfter time.Duration) (remover func()) {
+	return func() {
 		for userID, calendar := range organizers {
-			if calendar.IsUnused(every) {
+			if calendar.IsUnused(considerUnusedAfter) {
 				delete(organizers, userID)
 			}
 		}
-	})
+	}
 }
 
+// AddToCalendar adds dates to a calendar, if it does not exists yet, it creates a new one
 func AddToCalendar(user echotron.User, dates ...Date) *Calendar {
 	var calendar *Calendar = organizers[user.ID]
 	if calendar == nil {
@@ -61,6 +65,7 @@ func AddToCalendar(user echotron.User, dates ...Date) *Calendar {
 	return calendar
 }
 
+// remind creates a reminder function
 func remind(calendar *Calendar, date FormattedDate, text string) (reminder func()) {
 	return func() {
 		if calendar == nil || !calendar.notification {
@@ -73,6 +78,7 @@ func remind(calendar *Calendar, date FormattedDate, text string) (reminder func(
 	}
 }
 
+// JoinEvent makes a user join an event having an invitation and a date
 func JoinEvent(user echotron.User, invitation, rawDate string) (calendar *Calendar, err error) {
 	var (
 		timestamp FormattedDate
@@ -109,6 +115,7 @@ func JoinEvent(user echotron.User, invitation, rawDate string) (calendar *Calend
 	return
 }
 
+// GetShareLink grabs the shareable link of a calendar
 func GetShareLink(botUsername string, c Calendar) string {
 	if botUsername == "" {
 		return "/start " + c.invitation

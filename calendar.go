@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-/* --- CALENDAR ERROR --- */
+/* --- CALENDAR ERRORS --- */
 
 type CalendarError string
 
@@ -252,6 +252,8 @@ func (t *toggler) Toggle() *toggler {
 	}
 	return t
 }
+
+/* --- UTILITIES --- */
 
 func Repeat(every time.Duration, do func()) {
 	c := time.Tick(every)
