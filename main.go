@@ -1,22 +1,18 @@
 package main
 
 import (
-	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/DazFather/parrbot/message"
 	"github.com/DazFather/parrbot/robot"
 	"github.com/DazFather/parrbot/tgui"
-
-	"github.com/NicoNex/echotron/v3"
 )
 
-var organizers = map[int64]*Calendar{}
-
 func main() {
-	clearUnused()
+	// Start cleaning unused calendars job
+	ClearUnusedCalendars(DEFAULT_UNUSED_TIME)
+	// Start the bot with the following commands:
 	robot.Start(
 		startHandler,   // start menu & handle join link
 		joinHandler,    // confirm join
@@ -29,22 +25,14 @@ func main() {
 	)
 }
 
-func clearUnused() {
-	go Repeat(UNUSED_TIME, func() {
-		for userID, calendar := range organizers {
-			if calendar.IsUnused() {
-				delete(organizers, userID)
-			}
-		}
-	})
-}
+/* --- BOT COMMAND --- */
 
 var startHandler = robot.Command{
 	Description: "Main menu",
 	Trigger:     "/start",
 	ReplyAt:     message.MESSAGE + message.CALLBACK_QUERY,
 	CallFunc: func(bot *robot.Bot, update *message.Update) message.Any {
-		var _, payload = extractCommand(update)
+		var payload = extractPayload(update)
 		if len(payload) == 0 {
 			var (
 				now  string = string(Today())
@@ -52,7 +40,7 @@ var startHandler = robot.Command{
 				opts = genDefaultEditOpt()
 			)
 
-			if calendar := organizers[bot.ChatID]; calendar != nil {
+			if calendar := CalendarOf(bot.ChatID); calendar != nil {
 				text = fmt.Sprint(LOGO, " <i>Hi! What can I do for you today?</i>\n",
 					"Here is some infos about your calendar:",
 					"\n", NOTIF_ON, "notification: <code>", calendar.notification, "</code>",
@@ -98,7 +86,7 @@ var joinHandler = robot.Command{
 	CallFunc: func(bot *robot.Bot, update *message.Update) message.Any {
 		var calendar *Calendar
 
-		if _, payload := extractCommand(update); len(payload) != 2 {
+		if payload := extractPayload(update); len(payload) != 2 {
 			return buildErrorMessage("Invalid joining: " + update.CallbackQuery.Data)
 		} else if c, err := JoinEvent(*update.CallbackQuery.From, payload[0], payload[1]); err != nil {
 			return buildErrorMessage(err.Error())
@@ -118,7 +106,7 @@ var publishHandler = robot.Command{
 	CallFunc: func(bot *robot.Bot, update *message.Update) message.Any {
 		var msg message.Any
 
-		switch _, payload := extractCommand(update); len(payload) {
+		switch payload := extractPayload(update); len(payload) {
 		case 0:
 			if callback := update.CallbackQuery; callback != nil {
 				msg = buildErrorMessage("No given payload")
@@ -146,8 +134,8 @@ var publishHandler = robot.Command{
 			}
 
 			var (
-				hasCalendar bool = organizers[bot.ChatID] != nil
-				link             = GetShareLink(*AddToCalendar(*update.CallbackQuery.From, date))
+				hasCalendar bool = CalendarOf(bot.ChatID) != nil
+				link             = GetShareLink(botUsername(), *AddToCalendar(*update.CallbackQuery.From, date))
 			)
 			Notify(update.CallbackQuery, DONE, fmt.Sprint("Date: ", CALENDAR, " ", date, " added to your calendar "))
 			if hasCalendar {
@@ -184,8 +172,9 @@ var editHandler = robot.Command{
 	ReplyAt:     message.MESSAGE + message.CALLBACK_QUERY,
 	CallFunc: func(bot *robot.Bot, update *message.Update) message.Any {
 		var (
-			calendar                  = organizers[bot.ChatID]
-			current, field, suggested string
+			calendar         = CalendarOf(bot.ChatID)
+			current          string
+			field, suggested string = extractFieldValue(update)
 		)
 		if update.Message != nil {
 			update.Message.Delete()
@@ -194,7 +183,7 @@ var editHandler = robot.Command{
 			return buildErrorMessage("You don't have a calendar yet, use the command /publish to create a new one")
 		}
 
-		if _, payload := extractCommand(update); len(payload) < 2 {
+		if field == "" || suggested == "" {
 			return genDefaultMessage(
 				icon("🆘"),
 				fmt.Sprint(
@@ -206,8 +195,6 @@ var editHandler = robot.Command{
 				),
 				tgui.Wrap(BTN_CANCEL),
 			)
-		} else {
-			field, suggested = strings.ToLower(payload[0]), strings.Join(payload[1:], " ")
 		}
 
 		switch field {
@@ -246,20 +233,19 @@ var setHandler = robot.Command{
 	ReplyAt: message.CALLBACK_QUERY,
 	CallFunc: func(bot *robot.Bot, update *message.Update) message.Any {
 		var (
-			callback               *message.CallbackQuery = update.CallbackQuery
-			field, value, previous string
-			calendar               *Calendar = organizers[bot.ChatID]
-			needWarning            bool
+			callback     *message.CallbackQuery = update.CallbackQuery
+			field, value string                 = extractFieldValue(update)
+			previous     string
+			calendar     *Calendar = CalendarOf(bot.ChatID)
+			needWarning  bool
 		)
 		if calendar == nil {
 			Collapse(callback, BLOCK, "Unable to set: no calendar found")
 			return nil
 		}
-		if _, payload := extractCommand(update); len(payload) < 2 {
+		if field == "" && value == "" {
 			Collapse(callback, BLOCK, "Unable to set: invalid command")
 			return nil
-		} else {
-			field, value = payload[0], strings.Join(payload[1:], " ")
 		}
 
 		switch field {
@@ -304,7 +290,7 @@ var linkHandler = robot.Command{
 	Trigger:     "/link",
 	ReplyAt:     message.MESSAGE + message.CALLBACK_QUERY,
 	CallFunc: func(bot *robot.Bot, update *message.Update) message.Any {
-		var calendar = organizers[bot.ChatID]
+		var calendar = CalendarOf(bot.ChatID)
 		if calendar == nil {
 			err := "You don't have a calendar yet, use the command /publish to create a new one"
 			if update.CallbackQuery == nil {
@@ -314,7 +300,7 @@ var linkHandler = robot.Command{
 			Notify(update.CallbackQuery, BLOCK, err)
 		}
 
-		tgui.ShowMessage(*update, "Your link: "+GetShareLink(*calendar), genDefaultEditOpt([]tgui.InlineButton{
+		tgui.ShowMessage(*update, "Your link: "+GetShareLink(botUsername(), *calendar), genDefaultEditOpt([]tgui.InlineButton{
 			tgui.InlineCaller("🔙 Back", "/start"),
 			BTN_CLOSE,
 		}))
@@ -322,122 +308,47 @@ var linkHandler = robot.Command{
 	},
 }
 
-func AddToCalendar(user echotron.User, dates ...Date) *Calendar {
-	var calendar *Calendar = organizers[user.ID]
-	if calendar == nil {
-		calendar = NewCalendar(
-			user.FirstName+" calendar",
-			user.FirstName+" personal event",
-			strconv.Itoa(int(user.ID)),
-		)
-		calendar.dates = make(map[FormattedDate]*Event, len(dates))
-		organizers[user.ID] = calendar
-	}
+/* --- UTILITIES --- */
 
-	for _, date := range dates {
-		timestamp := date.Formatted()
-		if !calendar.addDate(timestamp) {
-			continue
-		}
-
-		date.Skip(0, 0, -7).WhenOccurrs(
-			Remind(calendar, timestamp, fmt.Sprint("Don't forget the ", calendar.name, ", is cooming soon: ", date)),
-		)
-
-		date.Skip(0, 0, -1).WhenOccurrs(
-			Remind(calendar, timestamp, fmt.Sprint("a Tomorrow ", date, ", there will be ", calendar.name, " waiting for you!")),
-		)
-
-		date.WhenOccurrs(func() {
-			calendar.removeDate(timestamp)
-		})
-	}
-
-	return calendar
-}
-
-func JoinEvent(user echotron.User, invitation, rawDate string) (calendar *Calendar, err error) {
-	var (
-		timestamp FormattedDate
-		ownerID   *int64 = retreiveOwner(invitation)
-	)
-
-	if ownerID == nil {
-		return nil, errors.New("Invalid invitation")
-	}
-
-	if date, err := ParseDate(rawDate); err == nil {
-		calendar = organizers[*ownerID]
-		timestamp = date.Formatted()
-		err = calendar.joinDate(timestamp, user.ID)
-	}
-	if err != nil {
-		return
-	}
-
-	if calendar.notification {
-		name := user.Username
-		if name == "" {
-			name = user.FirstName
-		} else {
-			name = "@" + name
-		}
-		count := "+ 1"
-		if tot := calendar.CountAttendee(timestamp) - 1; tot > 0 {
-			count = fmt.Sprint(tot, " ", count)
-		}
-		sendNotification(*ownerID, fmt.Sprint("<b>", count, "</b>: ", name, " joined your event in date: ", timestamp.Beautify()))
+func extractText(update *message.Update) (content string) {
+	if update.CallbackQuery != nil {
+		content = update.CallbackQuery.Data
+	} else if msg := update.FromMessage(); msg != nil {
+		content = msg.Text
 	}
 
 	return
 }
 
-func Remind(calendar *Calendar, date FormattedDate, text string) (reminder func()) {
-	return func() {
-		if calendar == nil || !calendar.notification {
-			return
-		}
-
-		for userID := range calendar.CurrentAttendee(date) {
-			genDefaultMessage(NOTIF_ON, text).Send(int64(userID))
-		}
-	}
-}
-
-func GetShareLink(c Calendar) string {
-	var res, err = message.API().GetMe()
-	if err != nil || res.Result == nil {
-		return "/start " + c.invitation
-	}
-	return "t.me/" + res.Result.Username + "?start=" + c.invitation
-}
-
-func extractCommand(update *message.Update) (command string, payload []string) {
-	if update.CallbackQuery != nil {
-		command = update.CallbackQuery.Data
-	} else if msg := update.FromMessage(); msg != nil {
-		command = msg.Text
-	} else {
+func extractPayload(update *message.Update) (payload []string) {
+	var command string = extractText(update)
+	if command == "" {
 		return
 	}
 
-	payload = strings.Split(command, " ")
-	return payload[0], payload[1:]
-}
-
-func retreiveOwner(invitation string) *int64 {
-	var rawID, err = strconv.Atoi(invitation)
-	if err != nil {
-		return nil
+	if values := strings.Split(command, " "); len(values) > 1 {
+		payload = values[1:]
 	}
 
-	userID := int64(rawID)
-	return &userID
+	return
 }
 
-func retreiveCalendar(invitation string) *Calendar {
-	if userID := retreiveOwner(invitation); userID != nil {
-		return organizers[*userID]
+func extractFieldValue(update *message.Update) (field string, value string) {
+	var command = extractText(update)
+	if command == "" {
+		return
 	}
-	return nil
+
+	if ind := strings.IndexRune(command, ' '); ind > 0 {
+		field, value = command[:ind], command[ind+1:]
+	}
+	return
+}
+
+func botUsername() (username string) {
+	var res, err = message.API().GetMe()
+	if err == nil && res.Result != nil {
+		username = res.Result.Username
+	}
+	return
 }

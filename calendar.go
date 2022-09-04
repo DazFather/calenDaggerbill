@@ -5,8 +5,6 @@ import (
 	"time"
 )
 
-const UNUSED_TIME = time.Hour * 24 * 30 * 6
-
 /* --- CALENDAR ERROR --- */
 
 type CalendarError string
@@ -19,8 +17,6 @@ const (
 	INVALID_CALENDAR CalendarError = "Empty calendar, invitation might be expired"
 	INVALID_EVENT    CalendarError = "This date is not avaiable anymore"
 	ALREADY_JOINED   CalendarError = "Event already joined"
-
-	INVALID_DATE CalendarError = ""
 )
 
 /* --- CALENDAR --- */
@@ -107,8 +103,8 @@ func (c Calendar) AllCurrentAttendee() []int64 {
 	return attendee
 }
 
-func (c Calendar) IsUnused() bool {
-	return len(c.dates) == 0 && time.Since(c.lastTimeUsed.Time) >= UNUSED_TIME
+func (c Calendar) IsUnused(after time.Duration) bool {
+	return len(c.dates) == 0 && time.Since(c.lastTimeUsed.Time) >= after
 }
 
 /* --- EVENT --- */
@@ -258,7 +254,7 @@ func (t *toggler) Toggle() *toggler {
 }
 
 func Repeat(every time.Duration, do func()) {
-	c := time.Tick(UNUSED_TIME)
+	c := time.Tick(every)
 	for _ = range c {
 		do()
 	}
