@@ -214,7 +214,7 @@ var editHandler = robot.Command{
 		}
 
 		tgui.ShowMessage(*update,
-			fmt.Sprint("📝 Your calendar's ", field, " will be change\n",
+			fmt.Sprint("📝 Your calendar's ", field, " will change\n",
 				"<i>from:</i> <code>", current, "</code>\n",
 				"<i>to:</i> <code>", suggested, "</code>\n",
 				"\n<b>Confirm the change?</b>",
@@ -344,7 +344,11 @@ func extractFieldValue(update *message.Update) (field string, value string) {
 	}
 
 	if ind := strings.IndexRune(command, ' '); ind > 0 {
-		field, value = command[:ind], command[ind+1:]
+		command = strings.TrimSpace(command[ind+1:])
+		ind = strings.IndexRune(command, ' ')
+		if ind > 0 {
+			field, value = command[:ind], command[ind+1:]
+		}
 	}
 	return
 }
